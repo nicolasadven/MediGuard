@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Type, Schema, Chat } from "@google/genai";
-import { AuditResult } from "../types";
+import { AuditResult, Language } from "../types";
 
 const fileToBase64 = async (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -53,10 +54,32 @@ const auditResponseSchema: Schema = {
   required: ["complianceScore", "compliantItems", "violations", "summary"],
 };
 
-export const analyzeCompliance = async (sopText: string, imageFile: File, sopFile?: File): Promise<AuditResult> => {
+// Modified to accept File OR string (base64) for imageSource
+export const analyzeCompliance = async (
+  sopText: string, 
+  imageSource: File | string, 
+  sopFile?: File | string, // Can be File or base64 string
+  language: Language = 'en'
+): Promise<AuditResult> => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const imageBase64 = await fileToBase64(imageFile);
+    
+    // Handle Image Source
+    let imageBase64 = "";
+    let imageMimeType = "image/jpeg"; // Default fallback
+
+    if (imageSource instanceof File) {
+      imageBase64 = await fileToBase64(imageSource);
+      imageMimeType = imageSource.type;
+    } else {
+      // Assume input is a Data URL or Raw Base64
+      if (imageSource.includes(',')) {
+        imageMimeType = imageSource.split(';')[0].split(':')[1];
+        imageBase64 = imageSource.split(',')[1];
+      } else {
+        imageBase64 = imageSource;
+      }
+    }
 
     const parts: any[] = [];
     let promptText = `
@@ -71,11 +94,26 @@ export const analyzeCompliance = async (sopText: string, imageFile: File, sopFil
       2. List compliant items you clearly see.
       3. Assign a compliance score (0-100).
       4. For every violation found, you MUST provide a bounding box [ymin, xmin, ymax, xmax] localized to the specific hazard in the image.
+
+      OUTPUT INSTRUCTION: 
+      The entire JSON response (summary, hazards, remedial actions) MUST be written in ${language === 'id' ? 'Indonesian (Bahasa Indonesia)' : 'English'}. 
+      The technical terms can remain in English if necessary, but the explanation must be in the target language.
     `;
 
     // Handle SOP Source (File vs Text)
     if (sopFile) {
-      const sopBase64 = await fileToBase64(sopFile);
+      let sopBase64 = "";
+      if (sopFile instanceof File) {
+        sopBase64 = await fileToBase64(sopFile);
+      } else {
+        // Assume string input for pending queue sync
+         if (sopFile.includes(',')) {
+          sopBase64 = sopFile.split(',')[1];
+        } else {
+          sopBase64 = sopFile;
+        }
+      }
+      
       parts.push({
         inlineData: {
           mimeType: "application/pdf",
@@ -93,7 +131,7 @@ export const analyzeCompliance = async (sopText: string, imageFile: File, sopFil
     // Add Image
     parts.push({
       inlineData: {
-        mimeType: imageFile.type,
+        mimeType: imageMimeType,
         data: imageBase64,
       },
     });
@@ -152,7 +190,7 @@ export const analyzeCompliance = async (sopText: string, imageFile: File, sopFil
 /**
  * Creates a chat session context-aware of the audit results
  */
-export const createConsultantChat = (auditResult: AuditResult): Chat => {
+export const createConsultantChat = (auditResult: AuditResult, language: Language = 'en'): Chat => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const systemInstruction = `
@@ -168,6 +206,9 @@ export const createConsultantChat = (auditResult: AuditResult): Chat => {
     If they ask how to fix a specific violation listed in the findings, provide detailed, expert medical and safety advice based on JCI standards and the specific remedial action listed in the report.
     If they ask about general safety, answer as an expert.
     
+    OUTPUT REQUIREMENT:
+    You must reply to the user in ${language === 'id' ? 'Indonesian (Bahasa Indonesia)' : 'English'}.
+
     TONE:
     Professional, helpful, strict on safety, but constructive.
     Keep answers concise and actionable (under 150 words usually).

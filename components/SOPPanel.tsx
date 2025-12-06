@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, Save, ChevronDown, FileUp, FileType, Trash2 } from 'lucide-react';
+import { FileText, Save, ChevronDown, FileUp, FileType, Trash2, AlertCircle, X } from 'lucide-react';
 import { SOP_PRESETS } from '../constants';
 
 interface SOPPanelProps {
@@ -8,10 +9,12 @@ interface SOPPanelProps {
   lastSaved?: Date | null;
   sopFile: File | null;
   setSopFile: (file: File | null) => void;
+  t: any;
 }
 
-const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sopFile, setSopFile }) => {
+const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sopFile, setSopFile, t }) => {
   const [selectedPreset, setSelectedPreset] = useState<string>('ward');
+  const [fileError, setFileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Effect to detect if text matches a preset exactly, otherwise set to custom
@@ -30,6 +33,7 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
   const handlePresetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const key = e.target.value;
     setSelectedPreset(key);
+    setFileError(null);
     
     if (key !== 'custom') {
       setSopText(SOP_PRESETS[key].text);
@@ -42,20 +46,46 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
     setSelectedPreset('custom');
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      if (file.type === 'application/pdf') {
-        setSopFile(file);
-        setSelectedPreset('custom'); // Switch to custom when file is uploaded
-      } else {
-        alert("Please upload a valid PDF document.");
-      }
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFileError(null);
+    const file = e.target.files?.[0];
+    
+    if (!file) return;
+
+    // 1. MIME Type Check
+    if (file.type !== 'application/pdf') {
+      setFileError(t.invalidPdfType);
+      return;
     }
+
+    // 2. Size Check (Max 20MB)
+    if (file.size > 20 * 1024 * 1024) {
+      setFileError(t.fileTooLarge);
+      return;
+    }
+    
+    // 3. Header Check for Corruption
+    try {
+      // Read first 4 bytes to check for %PDF signature
+      const arrayBuffer = await file.slice(0, 4).arrayBuffer();
+      const header = new TextDecoder().decode(arrayBuffer);
+      if (!header.startsWith('%PDF')) {
+        setFileError(t.corruptedPdf);
+        return;
+      }
+    } catch (err) {
+      console.error("File read error", err);
+      setFileError(t.readError);
+      return;
+    }
+
+    setSopFile(file);
+    setSelectedPreset('custom');
   };
 
   const clearFile = () => {
     setSopFile(null);
+    setFileError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -64,14 +94,14 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
   };
 
   return (
-    <div className="bg-slate-800 rounded-xl shadow-sm border border-slate-700 flex flex-col h-full overflow-hidden">
-      <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex flex-col gap-3">
+    <div className="bg-slate-800 dark:bg-slate-900 rounded-xl shadow-sm border border-slate-700 dark:border-slate-800 flex flex-col h-full overflow-hidden transition-colors">
+      <div className="p-4 border-b border-slate-700 dark:border-slate-800 bg-slate-900/50 flex flex-col gap-3">
         
         {/* Title Row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-blue-400" />
-            <h2 className="font-semibold text-slate-100">Procedures (SOP)</h2>
+            <h2 className="font-semibold text-slate-100">{t.sopTitle}</h2>
           </div>
           
           {/* Upload Button */}
@@ -81,7 +111,7 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
               className="flex items-center gap-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg transition-colors border border-slate-600"
             >
               <FileUp className="h-3 w-3" />
-              Upload PDF
+              {t.uploadPdf}
             </button>
           )}
         </div>
@@ -94,6 +124,7 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
               onChange={handlePresetChange}
               className="w-full appearance-none bg-slate-800 border border-slate-600 text-slate-200 text-sm rounded-lg px-3 py-2 pr-8 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors cursor-pointer hover:bg-slate-700"
             >
+              <option value="" disabled hidden>{t.selectPreset}</option>
               {Object.entries(SOP_PRESETS).map(([key, preset]) => (
                 <option key={key} value={key}>
                   {preset.label}
@@ -107,6 +138,20 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
         )}
 
       </div>
+
+      {/* Error Banner */}
+      {fileError && (
+        <div className="bg-red-500/10 border-b border-red-500/20 p-2 px-4 flex items-center gap-2 text-red-300 text-xs animate-in slide-in-from-top-2">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{fileError}</span>
+          <button 
+            onClick={() => setFileError(null)} 
+            className="ml-auto hover:text-white p-1 rounded-full hover:bg-red-500/20 transition-colors"
+          >
+            <X className="h-3 w-3"/>
+          </button>
+        </div>
+      )}
       
       <div className="flex-1 p-4 relative">
         {sopFile ? (
@@ -123,14 +168,14 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
                 className="flex items-center gap-2 text-slate-300 hover:text-red-400 text-sm font-medium px-4 py-2 hover:bg-slate-700 rounded-lg transition-colors"
               >
                 <Trash2 className="h-4 w-4" />
-                Remove File
+                {t.removeFile}
               </button>
             </div>
           </div>
         ) : (
           <textarea
             className="w-full h-full min-h-[300px] resize-none border-0 focus:ring-0 text-white placeholder:text-slate-500 text-sm leading-relaxed p-0 outline-none bg-transparent"
-            placeholder="Paste your safety protocols here or upload a PDF..."
+            placeholder={t.sopPlaceholder}
             value={sopText}
             onChange={handleTextChange}
             spellCheck={false}
@@ -138,12 +183,12 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
         )}
       </div>
       
-      <div className="bg-slate-900/50 px-4 py-2 text-xs text-slate-400 border-t border-slate-700 flex justify-between items-center">
-        <span>{sopFile ? 'Using Uploaded Document' : 'Editable compliance standards'}</span>
+      <div className="bg-slate-900/50 px-4 py-2 text-xs text-slate-400 border-t border-slate-700 dark:border-slate-800 flex justify-between items-center">
+        <span>{sopFile ? t.usingUploaded : t.editableStandard}</span>
         {!sopFile && lastSaved && (
           <div className="flex items-center gap-1.5 text-blue-400/80 animate-pulse">
             <Save className="h-3 w-3" />
-            <span>Auto-saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span>{t.autoSaved} {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
         )}
       </div>

@@ -1,4 +1,6 @@
 
+export type Language = 'en' | 'id';
+
 export interface Violation {
   hazard: string;
   severity: 'High' | 'Medium' | 'Low';
@@ -21,6 +23,15 @@ export interface SavedAudit {
   fullSOP: string;
   complianceScore: number;
   result: AuditResult;
+}
+
+export interface PendingAudit {
+  id: string;
+  timestamp: number;
+  sessionName: string;
+  sopText: string;
+  imageBase64: string; // Stored as base64 since File objects don't persist in localStorage
+  sopFileBase64?: string; // Optional PDF base64
 }
 
 export interface ChatMessage {
