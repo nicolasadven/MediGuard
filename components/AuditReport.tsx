@@ -80,6 +80,22 @@ const AuditReport: React.FC<AuditReportProps> = ({ result }) => {
   return (
     <div className="space-y-4 animate-fade-in-up relative">
       
+      {/* Loading Overlay */}
+      {isExporting && (
+        <div className="absolute inset-0 z-40 bg-white/60 backdrop-blur-sm flex items-center justify-center rounded-2xl">
+           <div className="bg-white p-8 rounded-2xl shadow-2xl border border-slate-100 flex flex-col items-center text-center animate-in zoom-in-95">
+             <div className="relative mb-4">
+               <div className="absolute inset-0 bg-blue-100 rounded-full animate-ping opacity-25"></div>
+               <div className="relative bg-blue-50 p-4 rounded-full">
+                 <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
+               </div>
+             </div>
+             <h3 className="text-xl font-bold text-slate-800 mb-1">Generating PDF</h3>
+             <p className="text-sm text-slate-500">Compiling audit findings...</p>
+           </div>
+        </div>
+      )}
+
       {/* Action Bar */}
       <div className="flex justify-end">
         <button
@@ -88,7 +104,7 @@ const AuditReport: React.FC<AuditReportProps> = ({ result }) => {
           className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          {isExporting ? 'Generating PDF...' : 'Export Report'}
+          {isExporting ? 'Processing...' : 'Export Report'}
         </button>
       </div>
 
@@ -260,18 +276,25 @@ const AuditReport: React.FC<AuditReportProps> = ({ result }) => {
 
       {/* Toast Notification */}
       {toast && (
-        <div className={`fixed bottom-8 right-8 z-50 flex items-center gap-3 px-5 py-4 rounded-xl shadow-2xl transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in ${
+        <div className={`fixed bottom-6 left-4 right-4 md:left-auto md:right-8 md:w-auto z-50 flex items-center gap-3 px-5 py-4 rounded-xl shadow-2xl transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in border border-white/10 ${
           toast.type === 'success' ? 'bg-slate-800 text-white' : 'bg-red-500 text-white'
         }`}>
           {toast.type === 'success' ? (
-            <CheckCircle className="h-5 w-5 text-green-400" />
+            <div className="bg-green-500/20 p-1.5 rounded-full">
+               <CheckCircle className="h-5 w-5 text-green-400" />
+            </div>
           ) : (
-            <AlertTriangle className="h-5 w-5 text-white" />
+            <div className="bg-white/20 p-1.5 rounded-full">
+              <AlertTriangle className="h-5 w-5 text-white" />
+            </div>
           )}
-          <p className="font-medium pr-2">{toast.message}</p>
+          <div className="flex-1">
+             <p className="font-bold text-sm">{toast.type === 'success' ? 'Success' : 'Error'}</p>
+             <p className="text-sm opacity-90">{toast.message}</p>
+          </div>
           <button 
             onClick={() => setToast(null)}
-            className="p-1 hover:bg-white/20 rounded-full transition-colors"
+            className="p-1 hover:bg-white/20 rounded-full transition-colors self-start mt-0.5"
           >
             <X className="h-4 w-4" />
           </button>

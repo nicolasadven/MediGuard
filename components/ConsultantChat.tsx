@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Send, MessageSquare, User, Bot, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Send, MessageSquare, User, Bot, Sparkles, Lightbulb } from 'lucide-react';
 import { AuditResult, ChatMessage } from '../types';
 import { createConsultantChat, sendConsultantMessage } from '../services/geminiService';
 import { Chat } from '@google/genai';
@@ -35,15 +35,38 @@ const ConsultantChat: React.FC<ConsultantChatProps> = ({ result }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+  // Generate dynamic suggestions based on findings
+  const suggestions = useMemo(() => {
+    const list: string[] = [];
     
-    if (!inputText.trim() || !chatSessionRef.current || isLoading) return;
+    // 1. Suggest fixes for specific high-severity violations first
+    const highSeverity = result.violations.filter(v => v.severity === 'High');
+    highSeverity.slice(0, 2).forEach(v => {
+      list.push(`How do I fix the "${v.hazard}"?`);
+    });
+
+    // 2. If space permits, add other violations
+    if (list.length < 2) {
+      const otherViolations = result.violations.filter(v => v.severity !== 'High');
+      otherViolations.slice(0, 2 - list.length).forEach(v => {
+        list.push(`Remedial action for "${v.hazard}"?`);
+      });
+    }
+
+    // 3. Add generic professional questions to fill the list
+    if (list.length < 3) list.push("Draft a Corrective Action Plan (CAP).");
+    if (list.length < 4) list.push("What are the relevant JCI standards?");
+
+    return list.slice(0, 4);
+  }, [result]);
+
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || !chatSessionRef.current || isLoading) return;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      text: inputText,
+      text: text,
       timestamp: Date.now()
     };
 
@@ -52,7 +75,7 @@ const ConsultantChat: React.FC<ConsultantChatProps> = ({ result }) => {
     setIsLoading(true);
 
     try {
-      const responseText = await sendConsultantMessage(chatSessionRef.current, userMsg.text);
+      const responseText = await sendConsultantMessage(chatSessionRef.current, text);
       
       const aiMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -76,8 +99,13 @@ const ConsultantChat: React.FC<ConsultantChatProps> = ({ result }) => {
     }
   };
 
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage(inputText);
+  };
+
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden flex flex-col h-[500px]">
+    <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden flex flex-col h-[550px]">
       {/* Header */}
       <div className="bg-slate-50 border-b border-slate-100 p-4 flex items-center gap-3">
         <div className="bg-blue-100 p-2 rounded-lg">
@@ -143,24 +171,46 @@ const ConsultantChat: React.FC<ConsultantChatProps> = ({ result }) => {
       </div>
 
       {/* Input Area */}
-      <div className="p-4 bg-white border-t border-slate-100">
-        <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type your question..."
-            className="flex-1 bg-slate-100 border-0 focus:ring-2 focus:ring-blue-100 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all"
-            disabled={isLoading}
-          />
-          <button
-            type="submit"
-            disabled={!inputText.trim() || isLoading}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white p-3 rounded-xl transition-colors shadow-sm"
-          >
-            {isLoading ? <Sparkles className="h-5 w-5 animate-pulse" /> : <Send className="h-5 w-5" />}
-          </button>
-        </form>
+      <div className="bg-white border-t border-slate-100 flex flex-col">
+        
+        {/* Smart Suggestions */}
+        {suggestions.length > 0 && (
+           <div className="px-4 pt-3 flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              <div className="flex items-center gap-1 text-xs font-bold text-blue-600 mr-1 flex-shrink-0">
+                 <Lightbulb className="h-3 w-3" />
+                 <span>Ask:</span>
+              </div>
+              {suggestions.map((s, i) => (
+                <button 
+                  key={i} 
+                  onClick={() => sendMessage(s)}
+                  className="flex-shrink-0 text-xs bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-slate-200 hover:border-blue-200 rounded-full px-3 py-1.5 transition-colors whitespace-nowrap active:scale-95"
+                >
+                   {s}
+                </button>
+              ))}
+           </div>
+        )}
+
+        <div className="p-4 pt-2">
+          <form onSubmit={handleFormSubmit} className="relative flex items-center gap-2">
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Type your question..."
+              className="flex-1 bg-slate-100 border-0 focus:ring-2 focus:ring-blue-100 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all"
+              disabled={isLoading}
+            />
+            <button
+              type="submit"
+              disabled={!inputText.trim() || isLoading}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white p-3 rounded-xl transition-colors shadow-sm"
+            >
+              {isLoading ? <Sparkles className="h-5 w-5 animate-pulse" /> : <Send className="h-5 w-5" />}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
