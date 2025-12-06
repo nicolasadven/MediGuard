@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Upload, X, Camera, ZoomIn, ZoomOut, AlertCircle } from 'lucide-react';
+import { Upload, X, Camera, ZoomIn, ZoomOut, AlertCircle, ImageIcon } from 'lucide-react';
 import { Violation } from '../types';
 
 interface ImageUploadPanelProps {
@@ -75,7 +75,10 @@ const ImageUploadPanel: React.FC<ImageUploadPanelProps> = ({
                 {violations.filter(v => v.boundingBox).length} Detected
               </span>
             )}
-            <div className="flex items-center gap-1 text-xs font-medium text-slate-400 bg-white px-2 py-1 rounded border border-slate-200 shadow-sm">
+            <div 
+              onClick={toggleZoom}
+              className="flex items-center gap-1 text-xs font-medium text-slate-500 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm active:bg-slate-50 touch-manipulation cursor-pointer"
+            >
               {isZoomed ? <ZoomOut className="h-3 w-3" /> : <ZoomIn className="h-3 w-3" />}
               <span>{isZoomed ? 'Reset' : 'Zoom'}</span>
             </div>
@@ -141,30 +144,38 @@ const ImageUploadPanel: React.FC<ImageUploadPanelProps> = ({
             {!isZoomed && (
               <button
                 onClick={clearImage}
-                className="absolute top-2 right-2 bg-white/90 p-2 rounded-full shadow-md hover:bg-red-50 text-slate-600 hover:text-red-500 transition-colors z-20"
+                className="absolute top-2 right-2 bg-white/90 p-3 rounded-full shadow-md hover:bg-red-50 text-slate-600 hover:text-red-500 transition-colors z-20 touch-manipulation"
                 title="Remove Image"
               >
-                <X className="h-5 w-5" />
+                <X className="h-6 w-6" />
               </button>
             )}
             
             {/* Hint Overlay */}
             {!isZoomed && (
                <div className="absolute bottom-4 bg-black/60 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full pointer-events-none opacity-0 hover:opacity-100 transition-opacity z-20">
-                 Click image to zoom • Hover boxes for details
+                 Tap to zoom • Hover boxes for details
                </div>
             )}
           </div>
         ) : (
           <div 
             onClick={triggerUpload}
-            className="w-full h-full min-h-[300px] border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all group"
+            className="w-full h-full min-h-[300px] border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all group active:scale-[0.99] touch-manipulation"
           >
-            <div className="bg-blue-100 p-4 rounded-full mb-4 group-hover:bg-blue-200 transition-colors">
-              <Upload className="h-8 w-8 text-blue-600" />
+            {/* Mobile-friendly Shutter Button Style */}
+            <div className="relative mb-6">
+              <div className="absolute inset-0 bg-blue-400 rounded-full blur-xl opacity-20 group-hover:opacity-40 transition-opacity"></div>
+              <div className="relative bg-gradient-to-br from-blue-500 to-blue-600 w-20 h-20 rounded-full flex items-center justify-center shadow-lg shadow-blue-200 group-hover:scale-110 transition-transform">
+                <Camera className="h-9 w-9 text-white" />
+              </div>
             </div>
-            <p className="text-slate-600 font-medium mb-1">Click to upload image</p>
-            <p className="text-slate-400 text-sm">JPG, PNG supported</p>
+            
+            <p className="text-slate-800 font-bold text-lg mb-1">Take Photo</p>
+            <div className="flex items-center gap-2 text-slate-400 text-sm">
+              <ImageIcon className="h-3 w-3" />
+              <span>or upload from gallery</span>
+            </div>
           </div>
         )}
         <input
@@ -172,6 +183,7 @@ const ImageUploadPanel: React.FC<ImageUploadPanelProps> = ({
           ref={fileInputRef}
           onChange={handleFileChange}
           accept="image/*"
+          capture="environment" // Forces rear camera on mobile
           className="hidden"
         />
       </div>

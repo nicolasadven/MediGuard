@@ -155,13 +155,13 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
       <Header onHistoryClick={() => setIsHistoryOpen(true)} />
 
-      <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
+      <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 max-w-7xl">
         
         {/* Intro / Dashboard Header */}
-        <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div className="mb-6 md:mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-             <h2 className="text-2xl font-bold text-slate-800 tracking-tight">New Audit Session</h2>
-             <p className="text-slate-500 mt-1">Compare room conditions against safety protocols instantly.</p>
+             <h2 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">New Audit Session</h2>
+             <p className="text-sm md:text-base text-slate-500 mt-1">Compare room conditions against safety protocols.</p>
           </div>
           <div className="w-full md:w-1/3">
              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 ml-1">Session Name / Room ID</label>
@@ -171,7 +171,7 @@ const App: React.FC = () => {
                </div>
                <input 
                  type="text" 
-                 className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400 shadow-sm text-sm font-medium"
+                 className="w-full pl-10 pr-4 py-3 md:py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400 shadow-sm text-sm font-medium"
                  placeholder="e.g. Ward 3B - Room 102"
                  value={sessionName}
                  onChange={(e) => setSessionName(e.target.value)}
@@ -180,9 +180,10 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Input Grid - Refined */}
+        {/* Input Grid - Refined for Mobile/Tablet */}
+        {/* On mobile: grid-cols-1 (stacked), auto height. On desktop: grid-cols-2, fixed height */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 h-auto md:h-[650px] items-stretch">
-          <div className="h-[500px] md:h-full w-full">
+          <div className="h-[400px] md:h-full w-full order-2 md:order-1">
             <SOPPanel 
               sopText={sopText} 
               setSopText={setSopText} 
@@ -191,7 +192,7 @@ const App: React.FC = () => {
               setSopFile={setSopFile}
             />
           </div>
-          <div className="h-[500px] md:h-full w-full">
+          <div className="h-[400px] md:h-full w-full order-1 md:order-2">
             <ImageUploadPanel 
               imageFile={imageFile} 
               setImageFile={setImageFile}
@@ -204,12 +205,12 @@ const App: React.FC = () => {
 
         {/* Action Bar */}
         <div className="flex flex-col items-center justify-center mb-12 sticky bottom-6 z-20 pointer-events-none">
-           <div className="bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-xl border border-slate-200 pointer-events-auto transition-all hover:shadow-2xl hover:scale-105">
+           <div className="bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-xl border border-slate-200 pointer-events-auto transition-all hover:shadow-2xl hover:scale-105 w-full max-w-sm md:w-auto">
               <button
                 onClick={handleAudit}
                 disabled={status === 'analyzing' || !imageFile}
                 className={`
-                  flex items-center gap-3 px-8 py-4 rounded-xl font-bold text-lg shadow-lg transition-all
+                  w-full md:w-auto flex items-center justify-center gap-3 px-8 py-4 rounded-xl font-bold text-lg shadow-lg transition-all active:scale-[0.98]
                   ${status === 'analyzing' 
                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
                     : !imageFile
@@ -221,12 +222,12 @@ const App: React.FC = () => {
                 {status === 'analyzing' ? (
                   <>
                     <Loader2 className="h-6 w-6 animate-spin" />
-                    Analyzing Compliance...
+                    Analyzing...
                   </>
                 ) : (
                   <>
                     <Play className="h-6 w-6 fill-current" />
-                    Run Compliance Audit
+                    Run Audit
                   </>
                 )}
               </button>
