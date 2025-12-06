@@ -1,0 +1,5 @@
+{
+  "name": "MediGuard Compliance Auditor",
+  "description": "An AI-powered hospital compliance auditor that analyzes room images against Standard Operating Procedures (SOPs) to identify safety hazards and compliance violations.",
+  "requestFramePermissions": []
+}
