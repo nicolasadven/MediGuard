@@ -15,6 +15,7 @@ const SOP_STORAGE_KEY = 'mediguard_sop_autosave';
 
 const App: React.FC = () => {
   const [sopText, setSopText] = useState(DEFAULT_SOP);
+  const [sopFile, setSopFile] = useState<File | null>(null);
   const [sessionName, setSessionName] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
@@ -69,8 +70,9 @@ const App: React.FC = () => {
       setErrorMsg("Please upload a hospital room image first.");
       return;
     }
-    if (!sopText.trim()) {
-      setErrorMsg("Please provide SOP text.");
+    // Check if either text OR file is provided
+    if (!sopText.trim() && !sopFile) {
+      setErrorMsg("Please provide SOP text or upload a PDF document.");
       return;
     }
 
@@ -79,12 +81,15 @@ const App: React.FC = () => {
     setResult(null);
 
     try {
-      const data = await analyzeCompliance(sopText, imageFile);
+      // Pass sopFile (can be undefined) to the service
+      const data = await analyzeCompliance(sopText, imageFile, sopFile || undefined);
       setResult(data);
       setStatus('complete');
       
       // Auto-save to history with session name
-      const newRecord = saveAudit(data, sopText, sessionName);
+      // If using file, we save a note about the file instead of full text
+      const storedSopText = sopFile ? `[PDF Audit] Used document: ${sopFile.name}` : sopText;
+      const newRecord = saveAudit(data, storedSopText, sessionName);
       setHistoryItems(prev => [newRecord, ...prev]);
       
       // Smooth scroll to results
@@ -111,6 +116,9 @@ const App: React.FC = () => {
       // Fallback for older records that might not have fullSOP
       setSopText(item.sopPreview + "\n\n[Full text not available for this older record]");
     }
+    
+    // Ensure we are in text mode when restoring history
+    setSopFile(null);
     
     // Restore session name
     setSessionName(item.sessionName || "");
@@ -179,6 +187,8 @@ const App: React.FC = () => {
               sopText={sopText} 
               setSopText={setSopText} 
               lastSaved={lastSaved}
+              sopFile={sopFile}
+              setSopFile={setSopFile}
             />
           </div>
           <div className="h-[500px] md:h-full w-full">

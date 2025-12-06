@@ -1,12 +1,12 @@
 import { GoogleGenAI, Type, Schema, Chat } from "@google/genai";
 import { AuditResult } from "../types";
 
-const processImage = async (file: File): Promise<string> => {
+const fileToBase64 = async (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      // Remove the Data URL prefix to get raw base64
+      // Remove the Data URL prefix to get raw base64 (e.g., "data:application/pdf;base64,")
       const base64 = result.split(',')[1];
       resolve(base64);
     };
@@ -53,20 +53,18 @@ const auditResponseSchema: Schema = {
   required: ["complianceScore", "compliantItems", "violations", "summary"],
 };
 
-export const analyzeCompliance = async (sopText: string, imageFile: File): Promise<AuditResult> => {
+export const analyzeCompliance = async (sopText: string, imageFile: File, sopFile?: File): Promise<AuditResult> => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const imageBase64 = await processImage(imageFile);
+    const imageBase64 = await fileToBase64(imageFile);
 
-    const prompt = `
+    const parts: any[] = [];
+    let promptText = `
       Act as a Senior JCI Hospital Accreditation Auditor. 
-      Analyze the uploaded image STRICTLY based on the provided text (SOP). 
+      Analyze the uploaded image STRICTLY based on the provided Standard Operating Procedures (SOP). 
       Identify every visible hazard and detect its location in the image.
       If a rule is violated, explain exactly why based on visual evidence. 
       All outputs must be in professional English.
-      
-      SOP TEXT:
-      "${sopText}"
 
       ADDITIONAL INSTRUCTIONS:
       1. Identify general safety hazards even if not explicitly in the SOP.
@@ -75,38 +73,54 @@ export const analyzeCompliance = async (sopText: string, imageFile: File): Promi
       4. For every violation found, you MUST provide a bounding box [ymin, xmin, ymax, xmax] localized to the specific hazard in the image.
     `;
 
+    // Handle SOP Source (File vs Text)
+    if (sopFile) {
+      const sopBase64 = await fileToBase64(sopFile);
+      parts.push({
+        inlineData: {
+          mimeType: "application/pdf",
+          data: sopBase64
+        }
+      });
+      promptText += "\n\nRefer to the attached PDF document for the Standard Operating Procedures.";
+    } else {
+      promptText += `\n\nSOP TEXT:\n"${sopText}"`;
+    }
+
+    // Add Prompt
+    parts.push({ text: promptText });
+
+    // Add Image
+    parts.push({
+      inlineData: {
+        mimeType: imageFile.type,
+        data: imageBase64,
+      },
+    });
+
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: {
-        parts: [
-          { text: prompt },
-          {
-            inlineData: {
-              mimeType: imageFile.type,
-              data: imageBase64,
-            },
-          },
-        ],
+        parts: parts,
       },
       config: {
         responseMimeType: "application/json",
         responseSchema: auditResponseSchema,
-        temperature: 0.2, // Low temperature for more analytical/factual output
+        temperature: 0.2, 
       },
     });
 
     const resultText = response.text;
     
-    // Check if the model refused to generate content (e.g. safety blocks)
     if (!resultText) {
-      throw new Error("The analysis could not be completed. The AI model returned an empty response, possibly due to safety content filters blocking the image or prompt.");
+      throw new Error("The analysis could not be completed. The AI model returned an empty response, possibly due to safety content filters.");
     }
 
     try {
       return JSON.parse(resultText) as AuditResult;
     } catch (e) {
       console.error("JSON Parse Error", e);
-      throw new Error("Received an invalid response format from the AI model. Please try again.");
+      throw new Error("Received an invalid response format from the AI model.");
     }
 
   } catch (error: any) {
@@ -115,7 +129,6 @@ export const analyzeCompliance = async (sopText: string, imageFile: File): Promi
     let detailedMessage = error.message || "An unknown error occurred during the audit.";
     const errorString = detailedMessage.toLowerCase();
 
-    // Enhance common HTTP errors with friendlier messages
     if (detailedMessage.includes("403") || errorString.includes("permission denied")) {
       detailedMessage = "Access Denied (403): The API key provided is invalid or does not have access to this model.";
     } else if (detailedMessage.includes("404") || errorString.includes("not found")) {
@@ -127,7 +140,7 @@ export const analyzeCompliance = async (sopText: string, imageFile: File): Promi
     } else if (detailedMessage.includes("503") || errorString.includes("overloaded")) {
       detailedMessage = "Service Unavailable (503): The AI service is currently overloaded. Please try again shortly.";
     } else if (errorString.includes("candidate") || errorString.includes("safety")) {
-      detailedMessage = "Safety Violation: The AI model refused to process the image due to safety guidelines. Please try a different image.";
+      detailedMessage = "Safety Violation: The AI model refused to process the image/document due to safety guidelines.";
     } else if (errorString.includes("fetch failed") || errorString.includes("network")) {
       detailedMessage = "Network Error: Could not connect to the AI service. Please check your internet connection.";
     }
