@@ -1,15 +1,17 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, Play, AlertCircle, Tag } from 'lucide-react';
 import Header from './components/Header';
 import SOPPanel from './components/SOPPanel';
 import ImageUploadPanel from './components/ImageUploadPanel';
 import AuditReport from './components/AuditReport';
 import HistoryModal from './components/HistoryModal';
+import ConsultantChat from './components/ConsultantChat'; // Import chat component
 import { DEFAULT_SOP } from './constants';
 import { analyzeCompliance } from './services/geminiService';
 import { AuditResult, LoadingState, SavedAudit } from './types';
 import { saveAudit, getAudits, deleteAudit, clearHistory } from './services/storageService';
+
+const SOP_STORAGE_KEY = 'mediguard_sop_autosave';
 
 const App: React.FC = () => {
   const [sopText, setSopText] = useState(DEFAULT_SOP);
@@ -19,15 +21,48 @@ const App: React.FC = () => {
   const [status, setStatus] = useState<LoadingState>('idle');
   const [result, setResult] = useState<AuditResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   
+  // Ref to track latest SOP text for the interval closure
+  const sopTextRef = useRef(sopText);
+
   // History State
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState<SavedAudit[]>([]);
 
-  // Load history on mount
+  // Update ref whenever sopText changes
+  useEffect(() => {
+    sopTextRef.current = sopText;
+  }, [sopText]);
+
+  // Load history and auto-saved SOP on mount
   useEffect(() => {
     setHistoryItems(getAudits());
+    
+    const savedSop = localStorage.getItem(SOP_STORAGE_KEY);
+    if (savedSop) {
+      setSopText(savedSop);
+    }
   }, []);
+
+  // Auto-save interval (every 30 seconds)
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      localStorage.setItem(SOP_STORAGE_KEY, sopTextRef.current);
+      setLastSaved(new Date());
+    }, 30000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // Clear results if image changes
+  useEffect(() => {
+    if (result) {
+      setResult(null);
+      setStatus('idle');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageFile]);
 
   const handleAudit = async () => {
     if (!imageFile) {
@@ -140,7 +175,11 @@ const App: React.FC = () => {
         {/* Input Grid - Refined */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 h-auto md:h-[650px] items-stretch">
           <div className="h-[500px] md:h-full w-full">
-            <SOPPanel sopText={sopText} setSopText={setSopText} />
+            <SOPPanel 
+              sopText={sopText} 
+              setSopText={setSopText} 
+              lastSaved={lastSaved}
+            />
           </div>
           <div className="h-[500px] md:h-full w-full">
             <ImageUploadPanel 
@@ -148,6 +187,7 @@ const App: React.FC = () => {
               setImageFile={setImageFile}
               imagePreviewUrl={imagePreviewUrl}
               setImagePreviewUrl={setImagePreviewUrl}
+              violations={result?.violations}
             />
           </div>
         </div>
@@ -203,6 +243,11 @@ const App: React.FC = () => {
                </div>
              )}
             <AuditReport result={result} />
+            
+            {/* Consultant Chat Section */}
+            <div className="mt-8">
+               <ConsultantChat result={result} />
+            </div>
           </div>
         )}
 

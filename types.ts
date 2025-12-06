@@ -3,6 +3,7 @@ export interface Violation {
   hazard: string;
   severity: 'High' | 'Medium' | 'Low';
   remedialAction: string;
+  boundingBox?: number[]; // [ymin, xmin, ymax, xmax] coordinates (0-1000)
 }
 
 export interface AuditResult {
@@ -20,6 +21,13 @@ export interface SavedAudit {
   fullSOP: string;
   complianceScore: number;
   result: AuditResult;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: number;
 }
 
 export type LoadingState = 'idle' | 'analyzing' | 'complete' | 'error';

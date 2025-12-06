@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type, Schema, Chat } from "@google/genai";
 import { AuditResult } from "../types";
 
 const processImage = async (file: File): Promise<string> => {
@@ -35,10 +35,15 @@ const auditResponseSchema: Schema = {
           hazard: { type: Type.STRING, description: "Description of the violation or hazard." },
           severity: { type: Type.STRING, enum: ["High", "Medium", "Low"], description: "Severity level of the violation." },
           remedialAction: { type: Type.STRING, description: "Specific action to correct the violation." },
+          boundingBox: {
+            type: Type.ARRAY,
+            items: { type: Type.INTEGER },
+            description: "Bounding box of the hazard [ymin, xmin, ymax, xmax] on a 1000x1000 scale.",
+          },
         },
-        required: ["hazard", "severity", "remedialAction"],
+        required: ["hazard", "severity", "remedialAction", "boundingBox"],
       },
-      description: "List of violations found based on the SOP and general hospital safety standards.",
+      description: "List of violations found based on the SOP and general hospital safety standards, including their locations in the image.",
     },
     summary: {
       type: Type.STRING,
@@ -56,7 +61,7 @@ export const analyzeCompliance = async (sopText: string, imageFile: File): Promi
     const prompt = `
       Act as a Senior JCI Hospital Accreditation Auditor. 
       Analyze the uploaded image STRICTLY based on the provided text (SOP). 
-      Identify every visible hazard. 
+      Identify every visible hazard and detect its location in the image.
       If a rule is violated, explain exactly why based on visual evidence. 
       All outputs must be in professional English.
       
@@ -67,7 +72,7 @@ export const analyzeCompliance = async (sopText: string, imageFile: File): Promi
       1. Identify general safety hazards even if not explicitly in the SOP.
       2. List compliant items you clearly see.
       3. Assign a compliance score (0-100).
-      4. For every violation, provide a severity level and a specific remedial action.
+      4. For every violation found, you MUST provide a bounding box [ymin, xmin, ymax, xmax] localized to the specific hazard in the image.
     `;
 
     const response = await ai.models.generateContent({
@@ -128,5 +133,47 @@ export const analyzeCompliance = async (sopText: string, imageFile: File): Promi
     }
 
     throw new Error(detailedMessage);
+  }
+};
+
+/**
+ * Creates a chat session context-aware of the audit results
+ */
+export const createConsultantChat = (auditResult: AuditResult): Chat => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  const systemInstruction = `
+    You are a Senior JCI Hospital Accreditation Consultant.
+    
+    CONTEXT:
+    You have just performed an audit on a hospital room.
+    The specific findings are:
+    ${JSON.stringify(auditResult)}
+    
+    YOUR GOAL:
+    Answer the user's questions about these findings.
+    If they ask how to fix a specific violation listed in the findings, provide detailed, expert medical and safety advice based on JCI standards and the specific remedial action listed in the report.
+    If they ask about general safety, answer as an expert.
+    
+    TONE:
+    Professional, helpful, strict on safety, but constructive.
+    Keep answers concise and actionable (under 150 words usually).
+  `;
+
+  return ai.chats.create({
+    model: 'gemini-2.5-flash',
+    config: {
+      systemInstruction: systemInstruction,
+    },
+  });
+};
+
+export const sendConsultantMessage = async (chat: Chat, message: string): Promise<string> => {
+  try {
+    const result = await chat.sendMessage({ message });
+    return result.text || "I apologize, I couldn't generate a response.";
+  } catch (error: any) {
+    console.error("Chat Error:", error);
+    throw new Error("Failed to send message to consultant.");
   }
 };
