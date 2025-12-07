@@ -376,6 +376,7 @@ const App: React.FC = () => {
                   sopFile={sopFile}
                   setSopFile={setSopFile}
                   t={t}
+                  language={language}
                 />
               </div>
               <div className="h-[400px] md:h-full w-full order-1 md:order-2">

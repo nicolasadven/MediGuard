@@ -1,4 +1,3 @@
-
 import React, { useRef, useState } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, ShieldCheck, Download, Loader2, X } from 'lucide-react';
 import { AuditResult } from '../types';
@@ -14,6 +13,7 @@ interface AuditReportProps {
 const AuditReport: React.FC<AuditReportProps> = ({ result, t }) => {
   const reportRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [loadingText, setLoadingText] = useState('');
   const [toast, setToast] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   const getScoreColor = (score: number) => {
@@ -37,10 +37,11 @@ const AuditReport: React.FC<AuditReportProps> = ({ result, t }) => {
   const generatePDF = async () => {
     if (!reportRef.current) return;
     setIsExporting(true);
+    setLoadingText(t.compilingFindings);
     setToast(null);
 
     try {
-      // Small delay to ensure any layout shifts are settled
+      // Small delay to ensure any layout shifts are settled and UI updates
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const canvas = await html2canvas(reportRef.current, {
@@ -49,6 +50,9 @@ const AuditReport: React.FC<AuditReportProps> = ({ result, t }) => {
         logging: false
       });
       
+      setLoadingText(t.generatingPdf);
+      await new Promise(resolve => setTimeout(resolve, 200)); // Visual feedback delay
+
       const imgData = canvas.toDataURL('image/png');
       const imgWidth = 210; // A4 width in mm
       const pageHeight = 295; // A4 height in mm
@@ -67,14 +71,15 @@ const AuditReport: React.FC<AuditReportProps> = ({ result, t }) => {
       pdf.save('MediGuard_Audit_Report.pdf');
       
       setToast({ type: 'success', message: t.successExport });
-      setTimeout(() => setToast(null), 3000);
+      setTimeout(() => setToast(null), 5000); // Longer timeout for visibility
       
     } catch (error) {
       console.error("PDF generation error", error);
       setToast({ type: 'error', message: t.failedExport });
-      setTimeout(() => setToast(null), 4000);
+      setTimeout(() => setToast(null), 5000);
     } finally {
       setIsExporting(false);
+      setLoadingText('');
     }
   };
 
@@ -83,16 +88,18 @@ const AuditReport: React.FC<AuditReportProps> = ({ result, t }) => {
       
       {/* Loading Overlay */}
       {isExporting && (
-        <div className="absolute inset-0 z-40 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm flex items-center justify-center rounded-2xl">
+        <div className="absolute inset-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex items-center justify-center rounded-2xl transition-all duration-300">
            <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 flex flex-col items-center text-center animate-in zoom-in-95">
-             <div className="relative mb-4">
+             <div className="relative mb-6">
                <div className="absolute inset-0 bg-blue-100 dark:bg-blue-900 rounded-full animate-ping opacity-25"></div>
-               <div className="relative bg-blue-50 dark:bg-blue-900/30 p-4 rounded-full">
-                 <Loader2 className="h-8 w-8 text-blue-600 dark:text-blue-400 animate-spin" />
+               <div className="relative bg-blue-50 dark:bg-blue-900/30 p-4 rounded-full border border-blue-100 dark:border-blue-800">
+                 <Loader2 className="h-10 w-10 text-blue-600 dark:text-blue-400 animate-spin" />
                </div>
              </div>
-             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-1">{t.generatingPdf}</h3>
-             <p className="text-sm text-slate-500 dark:text-slate-400">{t.compilingFindings}</p>
+             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">{loadingText || t.processing}</h3>
+             <div className="w-48 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 animate-progress-indeterminate"></div>
+             </div>
            </div>
         </div>
       )}
@@ -102,7 +109,7 @@ const AuditReport: React.FC<AuditReportProps> = ({ result, t }) => {
         <button
           onClick={generatePDF}
           disabled={isExporting}
-          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
         >
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           {isExporting ? t.processing : t.exportReport}
@@ -276,29 +283,40 @@ const AuditReport: React.FC<AuditReportProps> = ({ result, t }) => {
         </div>
       </div>
 
-      {/* Toast Notification */}
+      {/* Prominent Toast Notification */}
       {toast && (
-        <div className={`fixed bottom-6 left-4 right-4 md:left-auto md:right-8 md:w-auto z-50 flex items-center gap-3 px-5 py-4 rounded-xl shadow-2xl transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in border border-white/10 ${
-          toast.type === 'success' ? 'bg-slate-800 text-white' : 'bg-red-500 text-white'
+        <div 
+          role="alert" 
+          aria-live="assertive"
+          className={`fixed top-24 right-4 md:right-8 z-50 flex items-start gap-4 p-5 rounded-xl shadow-2xl transition-all duration-300 animate-in slide-in-from-right fade-in max-w-sm w-full border-l-4 backdrop-blur-md ${
+          toast.type === 'success' 
+            ? 'bg-slate-800/95 dark:bg-slate-800/95 text-white border-green-500 shadow-green-900/20' 
+            : 'bg-white/95 dark:bg-slate-800/95 text-slate-800 dark:text-white border-red-500 shadow-red-900/10'
         }`}>
           {toast.type === 'success' ? (
-            <div className="bg-green-500/20 p-1.5 rounded-full">
-               <CheckCircle className="h-5 w-5 text-green-400" />
+            <div className="bg-green-500/20 p-2 rounded-full flex-shrink-0">
+               <CheckCircle className="h-6 w-6 text-green-400 animate-pulse" />
             </div>
           ) : (
-            <div className="bg-white/20 p-1.5 rounded-full">
-              <AlertTriangle className="h-5 w-5 text-white" />
+            <div className="bg-red-500/10 p-2 rounded-full flex-shrink-0">
+              <AlertTriangle className="h-6 w-6 text-red-500" />
             </div>
           )}
-          <div className="flex-1">
-             <p className="font-bold text-sm">{toast.type === 'success' ? 'Success' : 'Error'}</p>
-             <p className="text-sm opacity-90">{toast.message}</p>
+          <div className="flex-1 pt-0.5">
+             <h4 className="font-bold text-base mb-1">{toast.type === 'success' ? 'Success' : 'Error'}</h4>
+             <p className={`text-sm leading-relaxed ${toast.type === 'success' ? 'text-slate-300' : 'text-slate-600 dark:text-slate-300'}`}>
+               {toast.message}
+             </p>
           </div>
           <button 
             onClick={() => setToast(null)}
-            className="p-1 hover:bg-white/20 rounded-full transition-colors self-start mt-0.5"
+            className={`p-1 rounded-full transition-colors mt-0.5 ${
+              toast.type === 'success' 
+                ? 'hover:bg-white/20 text-slate-400 hover:text-white' 
+                : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-white'
+            }`}
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
         </div>
       )}

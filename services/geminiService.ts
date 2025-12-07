@@ -187,6 +187,52 @@ export const analyzeCompliance = async (
   }
 };
 
+export const summarizeSOP = async (sopText: string, sopFile: File | null, language: Language = 'en'): Promise<string> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const parts: any[] = [];
+
+    let prompt = `
+      Summarize the key safety requirements from this Standard Operating Procedure (SOP).
+      
+      Requirements:
+      1. Provide 3-5 concise bullet points.
+      2. Focus on critical safety hazards and compliance checks.
+      3. Keep the language professional and clear.
+      4. Output the summary in ${language === 'id' ? 'Indonesian' : 'English'}.
+    `;
+
+    if (sopFile) {
+      const sopBase64 = await fileToBase64(sopFile);
+      parts.push({
+        inlineData: {
+          mimeType: "application/pdf",
+          data: sopBase64
+        }
+      });
+      prompt += "\n\nRefer to the attached PDF file.";
+    } else {
+      prompt += `\n\nSOP TEXT:\n"${sopText}"`;
+    }
+
+    parts.push({ text: prompt });
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: { parts },
+      config: {
+        temperature: 0.3,
+      }
+    });
+
+    return response.text || "Could not generate summary.";
+
+  } catch (error: any) {
+    console.error("SOP Summary Error:", error);
+    throw new Error(error.message || "Failed to summarize SOP");
+  }
+};
+
 /**
  * Creates a chat session context-aware of the audit results
  */

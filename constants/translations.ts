@@ -43,6 +43,10 @@ export const TRANSLATIONS = {
     fileTooLarge: "File is too large (Max 20MB).",
     corruptedPdf: "File appears to be corrupted or not a valid PDF.",
     readError: "Could not read file.",
+    summarizeSop: "Summarize SOP",
+    generatingSummary: "Generating Summary...",
+    sopSummary: "SOP Quick Summary",
+    summaryFailed: "Could not generate summary.",
 
     // Image Panel
     imageTitle: "Reality (Room Image)",
@@ -128,6 +132,10 @@ export const TRANSLATIONS = {
     fileTooLarge: "File terlalu besar (Maks 20MB).",
     corruptedPdf: "File tampak rusak atau bukan PDF yang valid.",
     readError: "Tidak dapat membaca file.",
+    summarizeSop: "Ringkas SOP",
+    generatingSummary: "Membuat Ringkasan...",
+    sopSummary: "Ringkasan Cepat SOP",
+    summaryFailed: "Gagal membuat ringkasan.",
 
     // Image Panel
     imageTitle: "Realita (Gambar Ruangan)",

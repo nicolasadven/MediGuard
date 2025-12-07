@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Send, MessageSquare, User, Bot, Sparkles, Lightbulb } from 'lucide-react';
 import { AuditResult, ChatMessage, Language } from '../types';
 import { createConsultantChat, sendConsultantMessage } from '../services/geminiService';
+import { getAudits } from '../services/storageService';
 import { Chat } from '@google/genai';
 
 interface ConsultantChatProps {
@@ -42,44 +43,65 @@ const ConsultantChat: React.FC<ConsultantChatProps> = ({ result, language, t }) 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Generate dynamic suggestions based on findings
+  // Generate dynamic suggestions based on findings AND history
   const suggestions = useMemo(() => {
     const list: string[] = [];
+    const addedHazards = new Set<string>();
+
+    // 1. Current Audit High Priority (Max 2)
+    const currentHighSeverity = result.violations.filter(v => v.severity === 'High');
     
-    if (language === 'id') {
-      const highSeverity = result.violations.filter(v => v.severity === 'High');
-      highSeverity.slice(0, 2).forEach(v => {
-        list.push(`Bagaimana cara memperbaiki "${v.hazard}"?`);
-      });
-
-      if (list.length < 2) {
-        const otherViolations = result.violations.filter(v => v.severity !== 'High');
-        otherViolations.slice(0, 2 - list.length).forEach(v => {
-          list.push(`Tindakan perbaikan untuk "${v.hazard}"?`);
-        });
+    currentHighSeverity.slice(0, 2).forEach(v => {
+      const q = language === 'id' ? `Cara memperbaiki "${v.hazard}"?` : `How do I fix "${v.hazard}"?`;
+      if (!addedHazards.has(v.hazard)) {
+        list.push(q);
+        addedHazards.add(v.hazard);
       }
+    });
 
-      if (list.length < 3) list.push("Buat Rencana Tindakan Perbaikan (CAP).");
-      if (list.length < 4) list.push("Apa standar JCI yang relevan?");
-
-    } else {
-      const highSeverity = result.violations.filter(v => v.severity === 'High');
-      highSeverity.slice(0, 2).forEach(v => {
-        list.push(`How do I fix the "${v.hazard}"?`);
+    // 2. Historical Context (Recurrent Issues)
+    // Fetch all audits to find frequent violations
+    const audits = getAudits();
+    const historyCounts: Record<string, number> = {};
+    
+    audits.forEach(a => {
+      a.result.violations.forEach(v => {
+        const name = v.hazard;
+        historyCounts[name] = (historyCounts[name] || 0) + 1;
       });
+    });
 
-      if (list.length < 2) {
-        const otherViolations = result.violations.filter(v => v.severity !== 'High');
-        otherViolations.slice(0, 2 - list.length).forEach(v => {
-          list.push(`Remedial action for "${v.hazard}"?`);
-        });
+    // Sort by frequency
+    const topHistorical = Object.entries(historyCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name);
+
+    // Add suggestions for recurrent issues that aren't already added
+    topHistorical.forEach(hazard => {
+      if (list.length < 4 && !addedHazards.has(hazard)) {
+        // If it's recurrent (appears more than once in history)
+        if (historyCounts[hazard] > 1) {
+           const q = language === 'id' 
+             ? `Cegah "${hazard}" berulang?` 
+             : `Prevent recurrent "${hazard}"?`;
+           list.push(q);
+           addedHazards.add(hazard);
+        }
       }
+    });
 
-      if (list.length < 3) list.push("Draft a Corrective Action Plan (CAP).");
-      if (list.length < 4) list.push("What are the relevant JCI standards?");
+    // 3. Fill with generic if empty
+    if (list.length < 2) {
+      if (language === 'id') {
+         if (!list.includes("Buat Rencana Tindakan Perbaikan (CAP).")) list.push("Buat Rencana Tindakan Perbaikan (CAP).");
+         if (!list.includes("Apa standar JCI yang relevan?")) list.push("Apa standar JCI yang relevan?");
+      } else {
+         if (!list.includes("Draft a Corrective Action Plan (CAP).")) list.push("Draft a Corrective Action Plan (CAP).");
+         if (!list.includes("What are the relevant JCI standards?")) list.push("What are the relevant JCI standards?");
+      }
     }
 
-    return list.slice(0, 4);
+    return list.slice(0, 5);
   }, [result, language]);
 
   const sendMessage = async (text: string) => {

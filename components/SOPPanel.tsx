@@ -1,7 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, Save, ChevronDown, FileUp, FileType, Trash2, AlertCircle, X } from 'lucide-react';
+import { FileText, Save, ChevronDown, FileUp, FileType, Trash2, AlertCircle, X, Sparkles, Loader2 } from 'lucide-react';
 import { SOP_PRESETS } from '../constants';
+import { Language } from '../types';
+import { summarizeSOP } from '../services/geminiService';
 
 interface SOPPanelProps {
   sopText: string;
@@ -10,11 +12,14 @@ interface SOPPanelProps {
   sopFile: File | null;
   setSopFile: (file: File | null) => void;
   t: any;
+  language?: Language;
 }
 
-const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sopFile, setSopFile, t }) => {
+const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sopFile, setSopFile, t, language = 'en' }) => {
   const [selectedPreset, setSelectedPreset] = useState<string>('ward');
   const [fileError, setFileError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [isSummarizing, setIsSummarizing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Effect to detect if text matches a preset exactly, otherwise set to custom
@@ -30,10 +35,16 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
     }
   }, [sopText]);
 
+  // Clear summary when text or file changes
+  useEffect(() => {
+    setSummary(null);
+  }, [sopText, sopFile]);
+
   const handlePresetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const key = e.target.value;
     setSelectedPreset(key);
     setFileError(null);
+    setSummary(null);
     
     if (key !== 'custom') {
       setSopText(SOP_PRESETS[key].text);
@@ -48,6 +59,7 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError(null);
+    setSummary(null);
     const file = e.target.files?.[0];
     
     if (!file) return;
@@ -86,6 +98,7 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
   const clearFile = () => {
     setSopFile(null);
     setFileError(null);
+    setSummary(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -93,8 +106,24 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
     fileInputRef.current?.click();
   };
 
+  const handleSummarize = async () => {
+    if ((!sopText.trim() && !sopFile) || isSummarizing) return;
+    
+    setIsSummarizing(true);
+    setSummary(null);
+    
+    try {
+      const result = await summarizeSOP(sopText, sopFile, language as Language);
+      setSummary(result);
+    } catch (error) {
+      setFileError(t.summaryFailed);
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
   return (
-    <div className="bg-slate-800 dark:bg-slate-900 rounded-xl shadow-sm border border-slate-700 dark:border-slate-800 flex flex-col h-full overflow-hidden transition-colors">
+    <div className="bg-slate-800 dark:bg-slate-900 rounded-xl shadow-sm border border-slate-700 dark:border-slate-800 flex flex-col h-full overflow-hidden transition-colors relative">
       <div className="p-4 border-b border-slate-700 dark:border-slate-800 bg-slate-900/50 flex flex-col gap-3">
         
         {/* Title Row */}
@@ -104,16 +133,35 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
             <h2 className="font-semibold text-slate-100">{t.sopTitle}</h2>
           </div>
           
-          {/* Upload Button */}
-          {!sopFile && (
-            <button 
-              onClick={triggerFileUpload}
-              className="flex items-center gap-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg transition-colors border border-slate-600"
-            >
-              <FileUp className="h-3 w-3" />
-              {t.uploadPdf}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+             {/* Summarize Button */}
+             {(sopText.trim().length > 0 || sopFile) && (
+                <button
+                  onClick={handleSummarize}
+                  disabled={isSummarizing}
+                  className="flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 px-3 py-1.5 rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                  title={t.summarizeSop}
+                >
+                  {isSummarizing ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3 w-3" />
+                  )}
+                  <span className="hidden sm:inline">{isSummarizing ? t.generatingSummary : t.summarizeSop}</span>
+                </button>
+             )}
+
+            {/* Upload Button */}
+            {!sopFile && (
+              <button 
+                onClick={triggerFileUpload}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg transition-colors border border-slate-600"
+              >
+                <FileUp className="h-3 w-3" />
+                {t.uploadPdf}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Preset Selector (Hidden if File Uploaded) */}
@@ -150,6 +198,24 @@ const SOPPanel: React.FC<SOPPanelProps> = ({ sopText, setSopText, lastSaved, sop
           >
             <X className="h-3 w-3"/>
           </button>
+        </div>
+      )}
+
+      {/* Summary Overlay Card */}
+      {summary && (
+        <div className="absolute top-[130px] left-4 right-4 z-20 bg-indigo-50/95 dark:bg-slate-800/95 backdrop-blur-sm border border-indigo-200 dark:border-indigo-900 rounded-xl p-4 shadow-lg animate-in slide-in-from-top-2">
+           <div className="flex items-start justify-between mb-2">
+             <div className="flex items-center gap-2">
+               <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+               <h3 className="font-bold text-indigo-900 dark:text-indigo-200 text-sm">{t.sopSummary}</h3>
+             </div>
+             <button onClick={() => setSummary(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+               <X className="h-4 w-4" />
+             </button>
+           </div>
+           <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap font-medium">
+             {summary}
+           </div>
         </div>
       )}
       
